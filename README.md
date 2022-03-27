@@ -3,7 +3,7 @@
 ### example
 ```
 python3 scan.py -u 4maneSuzuha
-python3 scan.py -u 4maneSuzuha -r test
+python3 scan.py -u 4maneSuzuha -r gitscan
 ```
 
 ### TODO
