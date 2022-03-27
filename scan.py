@@ -47,14 +47,14 @@ with open('config.json', 'r') as f:
     excludes = config['excludes']
 
 for path in paths:
-    print(f'scanning {path} for text for filename')
+    print(f'scanning filename in {path}')
     filename_regex = ''.join([f' "*{incl}"' for incl in filename_regexes])[1:]
     command1 = f'git --git-dir={path}/.git --no-pager log --name-only --oneline -p -- {filename_regex} '
     command1 += f'$(git --git-dir={path}/.git rev-list --all)'
     logging.debug(command1)
     subprocess.run(command1, shell=True)
 
-    print(f'scanning {path} for text for text occurrences')
+    print(f'scanning for text occurrences in {path}')
     text_regex = ''.join([f'({tr})|' for tr in text_regexes])[:-1]
     exclude = ''.join([f' ":!{excl}"' for excl in excludes])[1:]
     command2 = f'git --git-dir={path}/.git --no-pager grep -iE "{text_regex}" '
