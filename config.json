@@ -1,0 +1,9 @@
+{
+  "text": [
+    "(secret|key|token).*[=:]",
+    "pass(word|[=:\\s])"
+  ],
+  "filename": [
+    ".*.yaml|.env|id_rsa|.*credentials.*|"
+  ]
+}
