@@ -47,7 +47,7 @@ with open('config.json', 'r') as f:
     excludes = config['excludes']
 
 for path in paths:
-    print(f'scanning filename in {path}')
+    print(f'scanning files in {path}')
     filename_regex = ''.join([f' "*{incl}"' for incl in filename_regexes])[1:]
     command1 = f'git --git-dir={path}/.git --no-pager log --name-only --oneline -p -- {filename_regex} '
     command1 += f'$(git --git-dir={path}/.git rev-list --all)'
