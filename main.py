@@ -36,7 +36,6 @@ tmp_dir = '/tmp/git-scan'
 os.makedirs(tmp_dir, exist_ok=True)
 paths = []
 
-# TODO: multithread scan
 for source in sources:
     path = f'{tmp_dir}/{source["name"]}'
     paths.append(path)
