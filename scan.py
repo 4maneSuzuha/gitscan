@@ -9,12 +9,14 @@ parser = argparse.ArgumentParser(
     description='Scan credentials in git repos/users.')
 parser.add_argument('-u', '--user', help='github username', required=True)
 parser.add_argument('-r', '--repo', help='repository name')
+parser.add_argument('-o', '--outfile', help='you should specify this option to remove lots of duplicated outputs')
 parser.add_argument('-v', '--verbose', help='show verbose output from scan', action='store_true')
 
 args = parser.parse_args()
 
 username = args.user
 repo = args.repo
+outfile = args.outfile
 if args.verbose:
     logging.basicConfig(level=logging.DEBUG)
 
@@ -50,7 +52,9 @@ for path in paths:
     print(f'scanning files in {path}')
     filename_regex = ''.join([f' "*{incl}"' for incl in filename_regexes])[1:]
     command1 = f'git --git-dir={path}/.git --no-pager log --name-only --oneline -p -- {filename_regex} '
-    command1 += f'$(git --git-dir={path}/.git rev-list --all)'
+    command1 += f'$(git --git-dir={path}/.git rev-list --all) '
+    if outfile:
+        command1 += f'>>{outfile}'
     logging.debug(command1)
     subprocess.run(command1, shell=True)
 
@@ -60,5 +64,21 @@ for path in paths:
     command2 = f'git --git-dir={path}/.git --no-pager grep -iE "{text_regex}" '
     command2 += f'$(git --git-dir={path}/.git rev-list --all '
     command2 += f'-- {exclude}) -- {exclude}'
+    if outfile:
+        command2 += f'>>{outfile}.tmp'
     logging.debug(command2)
     subprocess.run(command2, shell=True)
+
+if outfile:
+    with open(f'{outfile}.tmp', 'r') as f:
+        new_l = []
+        lines = f.readlines()
+        seen = set()
+        for line in lines:
+            item = line.split(':', 1)[1]
+            if item not in seen:
+                seen.add(item)
+                new_l.append(line)
+    with open(f'{outfile}', 'a') as f:
+        f.writelines(new_l)
+    os.remove(f'{outfile}.tmp')

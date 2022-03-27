@@ -1,7 +1,7 @@
 {
   "text": [
-    "(secret|key|token).*[=:]",
-    "pass(word|[=:\\s])"
+    "(secret|key|token)[_=:\\s].*[:=]",
+    "pass(word|[=:\\s]).*[:=]"
   ],
   "filename": [
     ".bashrc",
@@ -51,6 +51,9 @@
     ".tugboat"
   ],
   "excludes": [
+    "*node_modules*",
+    "*css*",
+    "*bootstrap*",
     "*docs*",
     "*vendor*",
     "*lib*"
