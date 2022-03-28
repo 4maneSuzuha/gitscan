@@ -1,9 +1,9 @@
 {
-  "text": [
+  "strings": [
     "(secret|key|token)[_=:\\s].*[:=]",
     "pass(word|[=:\\s]).*[:=]"
   ],
-  "filename": [
+  "files": [
     ".bashrc",
     "pem",
     ".npmrc",
@@ -56,6 +56,7 @@
     "*bootstrap*",
     "*docs*",
     "*vendor*",
-    "*lib*"
+    "*lib*",
+    "*venv*"
   ]
 }

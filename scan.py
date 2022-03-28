@@ -1,84 +1,88 @@
-import json
-import logging
-import requests
-import subprocess
-import os
 import argparse
+import json
+import multiprocessing as mp
+import logging
+import os
+import subprocess
 
-parser = argparse.ArgumentParser(
-    description='Scan credentials in git repos/users.')
-parser.add_argument('-u', '--user', help='github username', required=True)
-parser.add_argument('-r', '--repo', help='repository name')
-parser.add_argument('-o', '--outfile', help='you should specify this option to remove lots of duplicated outputs')
-parser.add_argument('-v', '--verbose', help='show verbose output from scan', action='store_true')
+import requests
 
-args = parser.parse_args()
 
-username = args.user
-repo = args.repo
-outfile = args.outfile
-if args.verbose:
-    logging.basicConfig(level=logging.DEBUG)
+# TODO: don't create file if result is empty
+#   may put shell commands into separated script file
+class Scanner:
+    def __init__(self, source, config, output):
+        self.reg_strings = ''.join([f'({reg_string})|' for reg_string in config['strings']])[:-1]
+        self.reg_file = ''.join([f' "*{reg_file}"' for reg_file in config['files']])[1:]
+        self.excludes = config['excludes']
+        self.clone_url = source['clone_url']
+        self.name = source['name']
+        self.output = output
+        self.path = f'{self.output}{self.name}'
 
-api_url = f'https://api.github.com/users/{username}/repos'
+    def git_clone(self):
+        if os.path.exists(self.path):
+            logging.info(f'{self.path} already exists')
+            return
+        subprocess.run(['git', 'clone', '--quiet', self.clone_url, self.path])
+        logging.info(f'cloned {self.clone_url} to {self.path}')
 
-if repo:
-    repos = [{'name': repo, 'fork': False, 'clone_url': f'https://github.com/{username}/{repo}.git'}]
-else:
-    repos = json.loads(requests.get(api_url).text)
+    def scan_files(self):
+        logging.info(f'scanning files in {self.path}')
+        command1 = f'git --git-dir={self.path}/.git --no-pager log --name-only --oneline -p -- {self.reg_file} '
+        command1 += f'$(git --git-dir={self.path}/.git rev-list --all) '
+        command1 += f'>> {self.output}out.d/git-scan-files-{self.name}.txt'
+        logging.debug(command1)
+        subprocess.run(command1, shell=True)
 
-sources = [{'name': r['name'], 'url': r['clone_url']} for r in repos if not r['fork']]
+    def scan_strings(self):
+        logging.info(f'scanning for text occurrences in {self.path}')
+        exclude = ''.join([f' ":!{exclude}"' for exclude in self.excludes])[1:]
+        command2 = f'git --git-dir={self.path}/.git --no-pager grep -iE "{self.reg_strings}" '
+        command2 += f'$(git --git-dir={self.path}/.git rev-list --all '
+        command2 += f'-- {exclude}) -- {exclude} '
+        # TODO: fix here to match everything after second item
+        command2 += f"| awk -F'[:]' '!seen[$2,$3,$4,$5,$6,$7,$8,$9,$10]++' "
+        command2 += f'>> {self.output}out.d/git-scan-strings-{self.name}.txt'
+        logging.debug(command2)
+        subprocess.run(command2, shell=True)
 
-tmp_dir = '/tmp/git-scan'
-os.makedirs(tmp_dir, exist_ok=True)
-paths = []
+    def scan(self):
+        self.git_clone()
+        self.scan_files()
+        self.scan_strings()
 
-for source in sources:
-    path = f'{tmp_dir}/{source["name"]}'
-    paths.append(path)
-    if os.path.exists(path):
-        print(f'{path} already exists')
-        continue
-    subprocess.run(['git', 'clone', '--quiet', source['url'], path])
-    print(f'cloned {source["name"]} to {path}')
 
-with open('config.json', 'r') as f:
-    config = json.load(f)
-    text_regexes = config['text']
-    filename_regexes = config['filename']
-    excludes = config['excludes']
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description='Scan credentials in git repos/users.')
+    parser.add_argument('-u', '--user', help='github username', required=True)
+    parser.add_argument('-r', '--repo', help='repository name')
+    parser.add_argument('-o', '--out', help='output folder', required=True)
+    parser.add_argument('-v', '--verbose', help='show verbose output from scan', action='store_true')
+    args = parser.parse_args()
+    username = args.user
 
-for path in paths:
-    print(f'scanning files in {path}')
-    filename_regex = ''.join([f' "*{incl}"' for incl in filename_regexes])[1:]
-    command1 = f'git --git-dir={path}/.git --no-pager log --name-only --oneline -p -- {filename_regex} '
-    command1 += f'$(git --git-dir={path}/.git rev-list --all) '
-    if outfile:
-        command1 += f'>>{outfile}'
-    logging.debug(command1)
-    subprocess.run(command1, shell=True)
+    repo = args.repo
+    out = args.out
+    if args.verbose:
+        logging.basicConfig(level=logging.DEBUG)
+    else:
+        logging.basicConfig(level=logging.INFO)
+    os.makedirs(f'{out}out.d', exist_ok=True)
 
-    print(f'scanning for text occurrences in {path}')
-    text_regex = ''.join([f'({tr})|' for tr in text_regexes])[:-1]
-    exclude = ''.join([f' ":!{excl}"' for excl in excludes])[1:]
-    command2 = f'git --git-dir={path}/.git --no-pager grep -iE "{text_regex}" '
-    command2 += f'$(git --git-dir={path}/.git rev-list --all '
-    command2 += f'-- {exclude}) -- {exclude}'
-    if outfile:
-        command2 += f'>>{outfile}.tmp'
-    logging.debug(command2)
-    subprocess.run(command2, shell=True)
+    api_url = f'https://api.github.com/users/{username}/repos'
 
-if outfile:
-    with open(f'{outfile}.tmp', 'r') as f:
-        new_l = []
-        lines = f.readlines()
-        seen = set()
-        for line in lines:
-            item = line.split(':', 1)[1]
-            if item not in seen:
-                seen.add(item)
-                new_l.append(line)
-    with open(f'{outfile}', 'a') as f:
-        f.writelines(new_l)
-    os.remove(f'{outfile}.tmp')
+    repos = [{'name': repo, 'fork': False,
+              'clone_url': f'https://github.com/{username}/{repo}.git'}] if repo else json.loads(
+        requests.get(api_url).text)
+
+    sources = [{'name': r['name'], 'clone_url': r['clone_url']} for r in repos if not r['fork']]
+    with open('config.json', 'r') as f:
+        conf = json.load(f)
+    scanners = [Scanner(source, conf, out) for source in sources]
+    ps = [mp.Process(target=scanner.scan) for scanner in scanners]
+    for p in ps:
+        p.start()
+    for p in ps:
+        p.join()
